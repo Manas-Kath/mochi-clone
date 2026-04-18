@@ -1,16 +1,17 @@
 /*
- * Mochi EDC - Sentient Engine v1.4 (REVERTED - SUPER SMOOTH)
- * Features: Startup Intro, Random Moods, Petting Sensor, Music Sync
- * Note: Reverted from GIF engine to Bitmap engine for maximum I2C performance.
+ * Mochi EDC - Sentient Engine v2.1 (Ultra-Smooth Variety)
+ * Features: Startup Intro, 40+ Random Bitmap Moods (PRE-CONVERTED), Petting Sensor
+ * Performance: Replaces GIF engine with raw bitmaps for 60FPS feel on I2C.
  */
 
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <Wire.h>
 #include <ChronosESP32.h>
-#include "all_frames.h"         // Main Mochi Bitmaps
-#include "250frames.h"          // Extra Mochi Bitmaps
-#include "daichi_intro.h"       // Intro Bitmaps
+#include "all_frames.h"         // legacy Huykhong set
+#include "250frames.h"          // legacy 250 set
+#include "daichi_intro.h"       // legacy intro
+#include "animation_bitmaps.h"  // NEW 29+ smooth bitmap animations
 
 #define I2C_SDA 21
 #define I2C_SCL 22
@@ -19,20 +20,20 @@
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 ChronosESP32 chronos("Mochi-EDC"); 
 
+enum RenderType { HUYKHONG_ARRAY, STRUCT_ARRAY, EXTRA_BITMAP_ARRAY };
 enum MochiState { INTRO, IDLE, NOTIFICATION, MUSIC, CALL, PETTED };
 MochiState currentState = INTRO;
 
-// Mood/Animation System (Bitmap Based)
-struct MochiMood {
-  const uint8_t* const* bitmapArray; 
-  const uint8_t (*gifFrames)[1024];  // Used for the struct format in 250frames
-  int frameCount;
-  bool isHuykhongFormat;             
+// Comprehensive Mood Structure
+struct MoodData {
+  RenderType type;
+  const void* data;
+  int count;
 };
 
-MochiMood moodHappy = { (const uint8_t* const*)frames, NULL, 772, true };
-MochiMood moodMisc  = { NULL, (const uint8_t (*)[1024])MOCHI_225FRAMES_frames, 225, false };
-MochiMood currentMood = moodHappy;
+MoodData moodHappyLegacy = { HUYKHONG_ARRAY, (const void*)frames, 772 };
+MoodData moodMiscLegacy  = { STRUCT_ARRAY, (const void*)MOCHI_225FRAMES_frames, 225 };
+MoodData currentMood = moodHappyLegacy;
 
 // Metadata & Sync
 String trackTitle = "Unknown", trackArtist = "Unknown";
@@ -42,7 +43,7 @@ unsigned long stateStartTime = 0;
 const unsigned long NOTIFY_TIMEOUT = 8000; 
 
 // Animation Controller
-#define FRAME_DELAY 40 // Solid 25FPS
+#define FRAME_DELAY 40 
 int currentFrame = 0;
 unsigned long lastFrameTime = 0;
 
@@ -71,6 +72,22 @@ void onCall(String callerName, bool isActive) {
   }
 }
 
+void pickRandomMood() {
+  int r = random(0, 100);
+  if (r < 10) {
+    currentMood = moodHappyLegacy;
+  } else if (r < 20) {
+    currentMood = moodMiscLegacy;
+  } else {
+    int idx = random(0, EXTRA_MOODS_COUNT);
+    currentMood.type = EXTRA_BITMAP_ARRAY;
+    currentMood.data = (const void*)extraMoods[idx].frames;
+    currentMood.count = extraMoods[idx].count;
+  }
+  currentFrame = 0;
+  Serial.println("New Smooth Mood Picked!");
+}
+
 void setup(void) {
   Serial.begin(115200);
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -82,7 +99,7 @@ void setup(void) {
   chronos.setRingerCallback(onCall);
   chronos.begin();
   
-  Serial.println("Mochi Engine v1.4 (Bitmap) Ready.");
+  Serial.println("Mochi Engine v2.1 Ready.");
 }
 
 void loop() {
@@ -119,10 +136,8 @@ void drawIntro() {
   if (millis() - lastFrameTime >= 40) {
     lastFrameTime = millis();
     u8g2.clearBuffer();
-    // In daichi_intro.h, the frames are in the AnimatedGIF struct format
     u8g2.drawBitmap(0, 0, 16, 64, daichi_intro_frames[currentFrame]);
     u8g2.sendBuffer();
-    
     currentFrame++;
     if (currentFrame >= DAICHI_INTRO_FRAME_COUNT) {
       currentFrame = 0;
@@ -136,11 +151,15 @@ void drawFace() {
     lastFrameTime = millis();
     u8g2.clearBuffer();
     
-    if (currentMood.isHuykhongFormat) {
-      u8g2.drawBitmap(0, 0, 16, 64, currentMood.bitmapArray[currentFrame]);
-    } else {
-      u8g2.drawBitmap(0, 0, 16, 64, currentMood.gifFrames[currentFrame]);
+    // Smooth Fast Render
+    const uint8_t* framePtr = NULL;
+    if (currentMood.type == HUYKHONG_ARRAY) {
+      framePtr = ((const uint8_t* const*)currentMood.data)[currentFrame];
+    } else if (currentMood.type == STRUCT_ARRAY || currentMood.type == EXTRA_BITMAP_ARRAY) {
+      framePtr = ((const uint8_t (*)[1024])currentMood.data)[currentFrame];
     }
+
+    if (framePtr) u8g2.drawBitmap(0, 0, 16, 64, framePtr);
     
     // Status Clock
     u8g2.setFont(u8g2_font_6x10_tf);
@@ -153,12 +172,8 @@ void drawFace() {
     u8g2.sendBuffer();
     
     currentFrame++;
-    if (currentFrame >= currentMood.frameCount) {
-      currentFrame = 0;
-      // 30% chance to swap mood
-      if (random(0, 10) < 3) {
-        currentMood = (currentMood.isHuykhongFormat) ? moodMisc : moodHappy;
-      }
+    if (currentFrame >= currentMood.count) {
+      pickRandomMood();
     }
   }
 }
