@@ -1,0 +1,17 @@
+# Redundant backups and zips
+backups/
+DasaiOled.zip
+temp_extract/
+
+# Large binary files not needed for the build
+*.gif
+*.mp4
+*.zip
+
+# Python temporary files
+__pycache__/
+*.pyc
+
+# Local IDE files
+.vscode/
+.platformio/
