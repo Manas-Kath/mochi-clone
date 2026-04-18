@@ -44,7 +44,7 @@ const BitmapMood extraMoods[] = {
     {anim_23_frames, 62}, {anim_24_frames, 72}, {anim_26_frames, 37}, {anim_27_frames, 50},
     {anim_28_frames, 17}, {anim_29_frames, 39}, {anim_30_frames, 19}, {anim_32_frames, 31},
     {anim_37_frames, 64}, {anim_38_frames, 28}, {anim_39_frames, 33}, {anim_42_frames, 137},
-    {anim_jojos_frames, 55}
+    {jojos_frames, 55}
 };
 
 const int EXTRA_MOODS_COUNT = 29;

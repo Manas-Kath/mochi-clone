@@ -1,5 +1,5 @@
-#ifndef ANIM_13_BIT-MAP_H
-#define ANIM_13_BIT-MAP_H
+#ifndef ANIM_13_BITMAP_H
+#define ANIM_13_BITMAP_H
 
 #include <pgmspace.h>
 

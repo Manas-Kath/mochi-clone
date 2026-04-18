@@ -1,5 +1,5 @@
-#ifndef INTRO_BIT-MAP_H
-#define INTRO_BIT-MAP_H
+#ifndef INTRO_BITMAP_H
+#define INTRO_BITMAP_H
 
 #include <pgmspace.h>
 

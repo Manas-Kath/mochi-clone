@@ -1,5 +1,5 @@
-#ifndef JOJOS_BIT-MAP_H
-#define JOJOS_BIT-MAP_H
+#ifndef JOJOS_BITMAP_H
+#define JOJOS_BITMAP_H
 
 #include <pgmspace.h>
 
