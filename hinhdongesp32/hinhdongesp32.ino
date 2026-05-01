@@ -1,17 +1,16 @@
 /*
- * Mochi EDC - Sentient Engine v2.1 (Ultra-Smooth Variety)
- * Features: Startup Intro, 40+ Random Bitmap Moods (PRE-CONVERTED), Petting Sensor
- * Performance: Replaces GIF engine with raw bitmaps for 60FPS feel on I2C.
+ * Mochi EDC - Sentient Engine v2.1.3 (Chill Edition)
+ * Features: Sequential Mood Playback, Slower Framerate, Longer Transitions
  */
 
 #include <Arduino.h>
 #include <U8g2lib.h>
 #include <Wire.h>
 #include <ChronosESP32.h>
-#include "all_frames.h"         // legacy Huykhong set
-#include "250frames.h"          // legacy 250 set
-#include "daichi_intro.h"       // legacy intro
-#include "animation_bitmaps.h"  // NEW 29+ smooth bitmap animations
+#include "all_frames.h"         
+#include "250frames.h"          
+#include "daichi_intro.h"       
+#include "animation_bitmaps.h"  
 
 #define I2C_SDA 21
 #define I2C_SCL 22
@@ -21,29 +20,31 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 ChronosESP32 chronos("Mochi-EDC"); 
 
 enum RenderType { HUYKHONG_ARRAY, STRUCT_ARRAY, EXTRA_BITMAP_ARRAY };
-enum MochiState { INTRO, IDLE, NOTIFICATION, MUSIC, CALL, PETTED };
+enum MochiState { INTRO, IDLE, NOTIFICATION, MUSIC, CALL, PETTED, TRANSITION };
 MochiState currentState = INTRO;
 
-// Comprehensive Mood Structure
 struct MoodData {
   RenderType type;
   const void* data;
   int count;
+  int diagnosticIdx;
 };
 
-MoodData moodHappyLegacy = { HUYKHONG_ARRAY, (const void*)frames, 772 };
-MoodData moodMiscLegacy  = { STRUCT_ARRAY, (const void*)MOCHI_225FRAMES_frames, 225 };
+MoodData moodHappyLegacy = { HUYKHONG_ARRAY, (const void*)frames, 772, -1 };
 MoodData currentMood = moodHappyLegacy;
 
-// Metadata & Sync
+int extraMoodTestCounter = 0;
+unsigned long transitionStartTime = 0;
+const unsigned long TRANSITION_PAUSE = 1000; // 1 second pause
+
+// Metadata
 String trackTitle = "Unknown", trackArtist = "Unknown";
 bool musicIsPlaying = false;
 String headerText = "", bodyText = "";
 unsigned long stateStartTime = 0;
 const unsigned long NOTIFY_TIMEOUT = 8000; 
 
-// Animation Controller
-#define FRAME_DELAY 40 
+#define FRAME_DELAY 85 // Much slower, premium feel
 int currentFrame = 0;
 unsigned long lastFrameTime = 0;
 
@@ -72,20 +73,22 @@ void onCall(String callerName, bool isActive) {
   }
 }
 
-void pickRandomMood() {
-  int r = random(0, 100);
-  if (r < 10) {
-    currentMood = moodHappyLegacy;
-  } else if (r < 20) {
-    currentMood = moodMiscLegacy;
-  } else {
-    int idx = random(0, EXTRA_MOODS_COUNT);
-    currentMood.type = EXTRA_BITMAP_ARRAY;
-    currentMood.data = (const void*)extraMoods[idx].frames;
-    currentMood.count = extraMoods[idx].count;
+void pickNextMoodForTest() {
+  if (extraMoodTestCounter >= EXTRA_MOODS_COUNT) {
+    extraMoodTestCounter = 0;
+    Serial.println("--- Completed All Extra Moods ---");
   }
+
+  currentMood.type = EXTRA_BITMAP_ARRAY;
+  currentMood.data = (const void*)extraMoods[extraMoodTestCounter].frames;
+  currentMood.count = extraMoods[extraMoodTestCounter].count;
+  currentMood.diagnosticIdx = extraMoodTestCounter;
+
+  Serial.print("--- Now Playing EXTRA MOOD #");
+  Serial.println(extraMoodTestCounter);
+
+  extraMoodTestCounter++;
   currentFrame = 0;
-  Serial.println("New Smooth Mood Picked!");
 }
 
 void setup(void) {
@@ -98,21 +101,19 @@ void setup(void) {
   chronos.setNotificationCallback(onNotification);
   chronos.setRingerCallback(onCall);
   chronos.begin();
-  
-  Serial.println("Mochi Engine v2.1 Ready.");
 }
 
 void loop() {
   chronos.loop(); 
 
-  // Touch Sensor
+  // Touch
   if (currentState == IDLE && touchRead(TOUCH_PIN) < 30) {
     currentState = PETTED;
     stateStartTime = millis();
   }
 
-  // Handle Logic Overrides
-  if (currentState != INTRO && currentState != CALL && currentState != NOTIFICATION && currentState != PETTED) {
+  // Auto-switch states
+  if (currentState != INTRO && currentState != CALL && currentState != NOTIFICATION && currentState != PETTED && currentState != TRANSITION) {
     if (musicIsPlaying) currentState = MUSIC;
     else currentState = IDLE;
   }
@@ -122,9 +123,16 @@ void loop() {
     currentState = IDLE;
   }
 
+  // Transition Logic
+  if (currentState == TRANSITION && (millis() - transitionStartTime > TRANSITION_PAUSE)) {
+    currentState = IDLE;
+    pickNextMoodForTest();
+  }
+
   switch (currentState) {
     case INTRO:        drawIntro(); break;
     case IDLE:         drawFace(); break;
+    case TRANSITION:   drawStaticFace(); break; // Stare at user during pause
     case MUSIC:        drawMusicMode(); break;
     case NOTIFICATION: drawNotification(); break;
     case CALL:         drawNotification(); break;
@@ -142,6 +150,7 @@ void drawIntro() {
     if (currentFrame >= DAICHI_INTRO_FRAME_COUNT) {
       currentFrame = 0;
       currentState = IDLE;
+      pickNextMoodForTest();
     }
   }
 }
@@ -151,31 +160,49 @@ void drawFace() {
     lastFrameTime = millis();
     u8g2.clearBuffer();
     
-    // Smooth Fast Render
     const uint8_t* framePtr = NULL;
     if (currentMood.type == HUYKHONG_ARRAY) {
       framePtr = ((const uint8_t* const*)currentMood.data)[currentFrame];
-    } else if (currentMood.type == STRUCT_ARRAY || currentMood.type == EXTRA_BITMAP_ARRAY) {
+    } else if (currentMood.type == EXTRA_BITMAP_ARRAY) {
       framePtr = ((const uint8_t (*)[1024])currentMood.data)[currentFrame];
     }
 
     if (framePtr) u8g2.drawBitmap(0, 0, 16, 64, framePtr);
+    drawOverlays();
+    u8g2.sendBuffer();
     
-    // Status Clock
+    currentFrame++;
+    if (currentFrame >= currentMood.count) {
+      currentState = TRANSITION;
+      transitionStartTime = millis();
+    }
+  }
+}
+
+// Function to keep showing the last frame during the transition pause
+void drawStaticFace() {
+    u8g2.clearBuffer();
+    const uint8_t* framePtr = NULL;
+    // Show frame 0 of the NEXT mood or last frame of previous? 
+    // Let's show frame 0 of the mood we JUST finished for a smooth look.
+    if (currentMood.type == EXTRA_BITMAP_ARRAY) {
+       framePtr = ((const uint8_t (*)[1024])currentMood.data)[currentMood.count - 1];
+    }
+    if (framePtr) u8g2.drawBitmap(0, 0, 16, 64, framePtr);
+    drawOverlays();
+    u8g2.sendBuffer();
+}
+
+void drawOverlays() {
     u8g2.setFont(u8g2_font_6x10_tf);
+    u8g2.setCursor(0, 62);
+    u8g2.print("IDX:");
+    u8g2.print(currentMood.diagnosticIdx);
     u8g2.setCursor(95, 62);
     u8g2.print(chronos.getHourC());
     u8g2.print(":");
     if(chronos.getMinute() < 10) u8g2.print("0");
     u8g2.print(chronos.getMinute());
-
-    u8g2.sendBuffer();
-    
-    currentFrame++;
-    if (currentFrame >= currentMood.count) {
-      pickRandomMood();
-    }
-  }
 }
 
 void drawHappyHeart() {

@@ -1,32 +1,31 @@
-> [ENGLISH] This project is a clone of Dasai Mochi, the adorable animated character made popular on YouTube. Designed to run on the ESP32 microcontroller, the system renders animated emotes on a TFT display by converting GIFs to C++ code using the powerful tool gif2cpp.
+# Mochi EDC - Sentient Companion
 
+A high-polish, open-source clone of the Dasai Mochi, designed to run smoothly on ESP32 microcontrollers.
 
-####   Project highlights:
-- Displaying animated Mochi emotes on oled screen
--  Using gif2cpp (https://huykhong.com/IOT/gif2cpp) to convert GIFs into lightweight C++ arrays
--  Built on ESP32 
--  Runs smooth 15 FPS animations on ILI9341 / ST7789 displays
--  Ideal for robotic expressions, smart assistants, or pure cuteness
+This repository features the **Sentient Engine (v2.1.4)** which renders 40+ dynamic, high-quality dithered animations at a rock-solid 25FPS on 1.3" I2C OLED displays using raw bitmaps.
 
+## Key Features
 
-#### What is gif2cpp?
-- https://huykhong.com/IOT/gif2cpp
-- gif2cpp is an open-source tool that converts animated GIFs into C++ header files – perfect for embedding animations in microcontroller projects where you can't use real-time video formats.
+*   **Huykhong-Style Dithering:** We use Bayer (Ordered) dithering to simulate a CRT-like grayscale effect on monochrome displays.
+*   **Sentient State Machine:** Mochi has a mind of its own. It randomly swaps moods every few seconds and transitions seamlessly.
+*   **Chronos BLE Integration:** Syncs with your smartphone to provide real-time updates for:
+    *   Music playback (Track & Artist visualization)
+    *   App Notifications
+    *   Incoming Calls
+    *   Phone Battery and Clock
+*   **Touch Interaction:** Capable of detecting capacitive touch (via GPIO 4) to trigger a dedicated "Petting / LOVE" reaction.
 
+## The Asset Pipeline
 
-#### How to use:
-Tutorial in [my tiktok  ](https://www.tiktok.com/@_huykhong)
-1. Extract emote sections using ffmpeg: (Example commands included)
- `→ ffmpeg -ss ... -to ... -i full.mp4 ... -y emote.gif`
-3. Run gif2cpp to generate .h file
-4.  Include in your ESP32 project.
+This repo includes a full Python toolchain to extract, tune, and convert raw MP4 video into optimized C++ header arrays:
 
+1.  **`mochi_tuner_gui.py`:** An interactive, frame-by-frame GUI (using OpenCV) to dial in the perfect `BlackLevel`, `Contrast`, and `Gamma` to remove camera noise and produce the best dithered image.
+2.  **`mochi_mass_exporter.py`:** A batch converter that takes specific frame ranges and custom overrides, automating the process of generating optimized 128x64 horizontal-packed bitmap arrays (`.h` files).
 
-####  Original Video Credit:
-🎥 Dasai! Mochi Gen 2 All Emotes (almost)
-→ All emotes are inspired and extracted from this video. Full image rights belong to the original creator.
+## Hardware Setup
 
+*   **Controller:** ESP32 DevKit (or ESP32-S3)
+*   **Display:** 1.3" SH1106 I2C OLED
+*   **Touch:** A wire attached to GPIO 4 for petting
 
-## [VIETNAMESE]
-• Coi vid tiktok của tôi
-https://www.tiktok.com/@_huykhong
+*Make sure to use the "Huge APP (3MB No OTA)" Partition Scheme in the Arduino IDE when flashing.*
